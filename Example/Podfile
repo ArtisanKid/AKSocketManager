@@ -1,0 +1,11 @@
+use_frameworks!
+
+target 'AKSocketManager_Example' do
+  pod 'AKSocketManager', :path => '../'
+
+  target 'AKSocketManager_Tests' do
+    inherit! :search_paths
+
+    
+  end
+end
