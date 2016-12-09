@@ -1,0 +1,16 @@
+PODS:
+  - AKSocketManager (0.1.0)
+
+DEPENDENCIES:
+  - AKSocketManager (from `../`)
+
+EXTERNAL SOURCES:
+  AKSocketManager:
+    :path: "../"
+
+SPEC CHECKSUMS:
+  AKSocketManager: f125b25e6f312138b58b419eab2e439aededad03
+
+PODFILE CHECKSUM: b05c495eeb62dc377fdd75b9cf96dd090024e6d7
+
+COCOAPODS: 1.0.1
