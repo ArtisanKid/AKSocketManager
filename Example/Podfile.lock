@@ -1,16 +1,21 @@
 PODS:
-  - AKSocketManager (0.1.0)
+  - AKSocketManager (0.1.0):
+    - CocoaAsyncSocket (= 7.5.1)
+  - CocoaAsyncSocket (7.5.1):
+    - CocoaAsyncSocket/GCD (= 7.5.1)
+  - CocoaAsyncSocket/GCD (7.5.1)
 
 DEPENDENCIES:
   - AKSocketManager (from `../`)
 
 EXTERNAL SOURCES:
   AKSocketManager:
-    :path: "../"
+    :path: ../
 
 SPEC CHECKSUMS:
-  AKSocketManager: f125b25e6f312138b58b419eab2e439aededad03
+  AKSocketManager: 5af8eb13082fdb30ae3bfe8e86b65b3353127a12
+  CocoaAsyncSocket: e0a7e93b2ffa411592ff87e58524fbbc9b95b4fa
 
 PODFILE CHECKSUM: b05c495eeb62dc377fdd75b9cf96dd090024e6d7
 
-COCOAPODS: 1.0.1
+COCOAPODS: 1.1.1
