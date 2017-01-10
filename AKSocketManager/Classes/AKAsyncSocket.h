@@ -12,6 +12,7 @@
  （2）统一三方库回调
  （3）支持单例模式
  （4）强制使用异步线程
+ （5）支持取消发送
  （5）更少的接口
  */
 
@@ -34,7 +35,24 @@ typedef void (^AKAsyncSocketWriteComplete) (BOOL success);
 - (void)disconnect;
 
 - (void)startReadData;
-- (void)writeData:(NSData *)data withTimeout:(NSTimeInterval)timeout complete:(AKAsyncSocketWriteComplete)complete;
+
+/**
+ 使用指定超时时间戳写入数据
+
+ @param data 写入的数据
+ @param time 超时时间戳
+ @param complete void (^AKAsyncSocketWriteComplete) (BOOL success)
+ @return 写入数据标识
+ */
+- (NSString *)writeData:(NSData *)data expiredTime:(NSTimeInterval)time complete:(AKAsyncSocketWriteComplete)complete;
+
+/**
+ 取消数据写入
+
+ @param writeID 写入数据标识
+ @return 取消结果
+ */
+- (BOOL)cancelWrite:(NSString *)writeID;
 
 @end
 

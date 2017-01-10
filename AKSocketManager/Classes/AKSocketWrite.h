@@ -15,22 +15,29 @@ NS_ASSUME_NONNULL_BEGIN
 typedef void(^AKSocketWriteTimeout)(AKSocketWrite *write);
 
 //将要写入的数据ID
-@property (nonatomic, assign) NSUInteger writeID;
+@property (nonatomic, strong) NSString *writeID;
 
 //将要写入的数据
 @property (nonatomic, strong) NSData *data;
 
-//超时秒数
-@property (nonatomic, assign) NSTimeInterval timeout;
+//超时时间戳
+@property (nonatomic, assign) NSTimeInterval expiredTime;
 
 //创建时间戳
-@property (nonatomic, assign) NSTimeInterval timestamp;
+@property (nonatomic, assign) NSTimeInterval createdTime;
+
+//开始写入时间戳
+@property (nonatomic, assign) NSTimeInterval activeTime;
+
+//完成写入时间戳
+@property (nonatomic, assign) NSTimeInterval completeTime;
 
 //更改操作状态
 @property (atomic, assign, getter=isWriting) BOOL writing;
 
 @property (nonatomic, strong) id complete;
 
+//监控
 - (void)monitorTimeout:(AKSocketWriteTimeout)timeout;
 
 @end

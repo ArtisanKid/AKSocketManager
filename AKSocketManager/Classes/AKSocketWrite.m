@@ -25,8 +25,19 @@
         return;
     }
     
+    NSTimeInterval now = [NSDate date].timeIntervalSince1970;
+    if(!self.expiredTime) {
+        return;
+    }
+    
+    if(!self.expiredTime <= now) {
+        !timeout ? : timeout(self);
+        return;
+    }
+    
     self.timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, DISPATCH_TIMER_STRICT, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0));
-    dispatch_source_set_timer(self.timer, DISPATCH_TIME_NOW, DISPATCH_TIME_FOREVER, 0);
+    NSTimeInterval interval = self.expiredTime - now;
+    dispatch_source_set_timer(self.timer, DISPATCH_TIME_NOW, interval * NSEC_PER_SEC, 0);
     __weak typeof(self) weak_self = self;
     dispatch_source_set_event_handler(self.timer, ^{
         dispatch_async(dispatch_get_main_queue(), ^{

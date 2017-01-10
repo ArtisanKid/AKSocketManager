@@ -22,7 +22,9 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 @property (nonatomic, assign) NSUInteger readDataTimes;//读数据次数
 
 @property (nonatomic, assign) NSUInteger writeDataTimes;//写数据次数
-@property (atomic, strong) NSMutableArray<AKSocketWrite *> *writes;
+@property (atomic, strong) NSMutableArray<AKSocketWrite *> *writesM;
+@property (atomic, strong) NSMapTable<NSString *, AKSocketWrite *> *writeMapTable;
+
 
 @property (nonatomic, assign, getter=isForceDisconnect) BOOL forceDisconnect;//是否强制断开
 @property (nonatomic, assign) NSUInteger reconnectTimes;//重连次数
@@ -45,7 +47,8 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     self = [super init];
     if(self) {
         _socket = [[GCDAsyncSocket alloc] initWithDelegate:self delegateQueue:dispatch_get_main_queue()];
-        _writes = [NSMutableArray array];
+        _writesM = [NSMutableArray array];
+        _writeMapTable = [NSMapTable strongToWeakObjectsMapTable];
     }
     return self;
 }
@@ -71,7 +74,7 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     self.readData = NO;
     self.readDataTimes = 0;
     self.writeDataTimes = 0;
-    [self.writes removeAllObjects];
+    [self.writesM removeAllObjects];
     self.reconnectTimes = 0;
     
     self.host = nil;
@@ -95,18 +98,19 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     [self.socket readDataWithTimeout:AKAsyncSocketTimeoutNever tag:self.readDataTimes++];
 }
 
-- (void)writeData:(NSData *)data withTimeout:(NSTimeInterval)timeout complete:(AKAsyncSocketWriteComplete)complete {
+- (NSString *)writeData:(NSData *)data expiredTime:(NSTimeInterval)time complete:(AKAsyncSocketWriteComplete)complete {
     if(!data.length) {
-        return;
+        return nil;
     }
     
     AKSocketWrite *write = [[AKSocketWrite alloc] init];
-    write.writeID = self.writeDataTimes++;
+    write.writeID = @(data.hash).description;
     write.data = data;
-    write.timeout = timeout;
-    write.timestamp = [NSDate date].timeIntervalSince1970;
+    write.expiredTime = time;
+    write.createdTime = [NSDate date].timeIntervalSince1970;
     write.complete = complete;
-    [self.writes addObject:write];
+    [self.writesM addObject:write];
+    [self.writeMapTable setObject:write forKey:write.writeID];
     
     __weak typeof(self) weak_self = self;
     [write monitorTimeout:^(AKSocketWrite *write) {
@@ -119,14 +123,33 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     }];
     
     if(!self.socket.isConnected) {
-        return;
+        return write.writeID;
     }
     
-    if(self.writes.firstObject != write) {
-        return;
+    if(self.writesM.firstObject != write) {
+        return write.writeID;
     }
     
     [self writeNext];
+    return write.writeID;
+}
+
+- (BOOL)cancelWrite:(NSString *)writeID {
+    if(!writeID.length) {
+        return NO;
+    }
+    
+    AKSocketWrite *write = [self.writeMapTable objectForKey:writeID];
+    if(!write) {
+        return NO;
+    }
+    
+    if(write.isWriting) {
+        return NO;
+    }
+    
+    [self.writesM removeObject:write];
+    return YES;
 }
 
 #pragma mark - Private
@@ -138,17 +161,23 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 
 
 - (void)writeNext {
-    if(!self.writes.count) {
+    if(!self.writesM.count) {
         return;
     }
     
-    AKSocketWrite *write = self.writes.firstObject;
+    AKSocketWrite *write = self.writesM.firstObject;
     if(write.isWriting) {
         return;
     }
     write.writing = YES;
     
-    NSTimeInterval timeout = write.timestamp + write.timeout - [NSDate date].timeIntervalSince1970;
+    NSTimeInterval currentTime = [NSDate date].timeIntervalSince1970;
+    if(write.expiredTime <= currentTime) {
+        [self completeWrite:write success:NO];
+        return;
+    }
+    
+    NSTimeInterval timeout = write.expiredTime - currentTime;
     [self.socket writeData:write.data withTimeout:timeout tag:write.writeID];
 }
 
@@ -157,7 +186,7 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
         return;
     }
     
-    [self.writes removeObject:write];
+    [self.writesM removeObject:write];
     AKAsyncSocketWriteComplete complete = write.complete;
     !complete ?: complete(success);
 }
@@ -197,7 +226,7 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
  **/
 - (void)socket:(GCDAsyncSocket *)sock didWriteDataWithTag:(long)tag {
     NSPredicate *predicate = [NSPredicate predicateWithFormat:@"writeID = %@", tag];
-    AKSocketWrite *write = [self.writes filteredArrayUsingPredicate:predicate].lastObject;
+    AKSocketWrite *write = [self.writesM filteredArrayUsingPredicate:predicate].lastObject;
     [self completeWrite:write success:YES];
     
     [self writeNext];
