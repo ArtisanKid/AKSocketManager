@@ -54,8 +54,12 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 }
 
 - (BOOL)connectToHost:(NSString *)host onPort:(uint16_t)port {
-    if(host.length && self.port) {
-        return self.socket.isConnected;
+    if(self.host.length && self.port) {
+        if([self.host isEqualToString:host] && self.port == port) {
+            return self.socket.isConnected;
+        } else {
+            return NO;
+        }
     }
     
     self.host = host;
@@ -115,6 +119,10 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     __weak typeof(self) weak_self = self;
     [write monitorTimeout:^(AKSocketWrite *write) {
         __strong typeof(weak_self) strong_self = weak_self;
+        if(!strong_self) {
+            return;
+        }
+        
         [strong_self completeWrite:write success:NO];
         
         if(write.isWriting) {
@@ -153,7 +161,6 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 }
 
 #pragma mark - Private
-
 - (BOOL)connect {
     NSError *error = nil;
     return [self.socket connectToHost:self.host onPort:self.port error:&error];
@@ -169,15 +176,15 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     if(write.isWriting) {
         return;
     }
-    write.writing = YES;
     
-    NSTimeInterval currentTime = [NSDate date].timeIntervalSince1970;
-    if(write.expiredTime <= currentTime) {
+    NSTimeInterval now = [NSDate date].timeIntervalSince1970;
+    if(write.expiredTime <= now) {
         [self completeWrite:write success:NO];
         return;
     }
     
-    NSTimeInterval timeout = write.expiredTime - currentTime;
+    write.writing = YES;
+    NSTimeInterval timeout = write.expiredTime - now;
     [self.socket writeData:write.data withTimeout:timeout tag:write.writeID];
 }
 

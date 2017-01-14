@@ -7,13 +7,11 @@
 //
 
 /*
- 确定AKSocketManager要做的事情
- （1）隐藏三方库细节
- （2）统一三方库回调
- （3）支持单例模式
- （4）强制使用异步线程
- （5）支持取消发送
- （5）更少的接口
+ AKAsyncSocket是GCDAsyncSocket的包装，隐藏了底层三方框架细节，主要实现了：
+ （1）支持单例模式
+ （2）强制使用异步线程进行socket通信
+ （3）支持取消信息发送
+ （4）支持信息过期
  */
 
 #import <Foundation/Foundation.h>
@@ -25,7 +23,7 @@ typedef void (^AKAsyncSocketWriteComplete) (BOOL success);
 @protocol AKAsyncSocketDelegate;
 @interface AKAsyncSocket : NSObject
 
-//单例，用于快速的管理Socket
+//单例，用于快速管理Socket
 @property (class, nonatomic, strong) AKAsyncSocket *socket;
 
 @property (nonatomic, weak) id<AKAsyncSocketDelegate> delegate;
@@ -34,6 +32,12 @@ typedef void (^AKAsyncSocketWriteComplete) (BOOL success);
 - (BOOL)connectToHost:(NSString *)host onPort:(uint16_t)port;
 - (void)disconnect;
 
+
+/**
+ 启动读取数据
+ 开始读取数据后，AKAsyncSocket会自动的循环读取数据
+ 获取到数据后，会通过socket:didReadData:协议方法通知业务方
+ */
 - (void)startReadData;
 
 /**
