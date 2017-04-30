@@ -24,7 +24,7 @@ typedef void (^AKAsyncSocketWriteComplete) (BOOL success);
 @interface AKAsyncSocket : NSObject
 
 //单例，用于快速管理Socket
-@property (class, nonatomic, strong) AKAsyncSocket *socket;
+@property (class, nonatomic, strong, readonly) AKAsyncSocket *socket;
 
 @property (nonatomic, weak) id<AKAsyncSocketDelegate> delegate;
 

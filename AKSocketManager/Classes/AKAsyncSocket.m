@@ -8,6 +8,7 @@
 
 #import "AKAsyncSocket.h"
 #import <CocoaAsyncSocket/GCDAsyncSocket.h>
+#import "AKSocketManagerMacro.h"
 #import "AKSocketWrite.h"
 
 static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
@@ -38,7 +39,6 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         sharedInstance = [[super allocWithZone:NULL] init];
-        //SJBLOGL(SJBMessageLogPrefix, @"实例化SJBMessageManager单例");
     });
     return sharedInstance;
 }
@@ -54,10 +54,17 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 }
 
 - (BOOL)connectToHost:(NSString *)host onPort:(uint16_t)port {
+    /**
+     如果已经有host何port了，说明已经连接过
+     如果再次传入的参数和已有参数相同，那么直接返回socket状态
+     如果不同，那么直接返回NO，表示连接错误
+     */
     if(self.host.length && self.port) {
         if([self.host isEqualToString:host] && self.port == port) {
+            AKSocketManagerLog(@"已创建socket");
             return self.socket.isConnected;
         } else {
+            AKSocketManagerLog(@"请先断开socket");
             return NO;
         }
     }
@@ -115,21 +122,7 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     write.complete = complete;
     [self.writesM addObject:write];
     [self.writeMapTable setObject:write forKey:write.writeID];
-    
-    __weak typeof(self) weak_self = self;
-    [write monitorTimeout:^(AKSocketWrite *write) {
-        __strong typeof(weak_self) strong_self = weak_self;
-        if(!strong_self) {
-            return;
-        }
-        
-        [strong_self completeWrite:write success:NO];
-        
-        if(write.isWriting) {
-            [strong_self writeNext];
-        }
-    }];
-    
+
     if(!self.socket.isConnected) {
         return write.writeID;
     }
@@ -137,6 +130,8 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     if(self.writesM.firstObject != write) {
         return write.writeID;
     }
+    
+    AKSocketManagerLog(@"writeID:%@", write.writeID);
     
     [self writeNext];
     return write.writeID;
@@ -156,16 +151,21 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
         return NO;
     }
     
+    AKSocketManagerLog(@"writeID:%@", writeID);
     [self.writesM removeObject:write];
     return YES;
 }
 
 #pragma mark - Private
 - (BOOL)connect {
+    AKSocketManagerLog(@"连接socket");
     NSError *error = nil;
-    return [self.socket connectToHost:self.host onPort:self.port error:&error];
+    BOOL isConnected = [self.socket connectToHost:self.host onPort:self.port error:&error];
+    if(!isConnected) {
+        AKSocketManagerLog(@"error:%@", error);
+    }
+    return isConnected;
 }
-
 
 - (void)writeNext {
     if(!self.writesM.count) {
@@ -183,9 +183,11 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
         return;
     }
     
+    AKSocketManagerLog(@"writeID:%@", write.writeID);
+    
     write.writing = YES;
     NSTimeInterval timeout = write.expiredTime - now;
-    [self.socket writeData:write.data withTimeout:timeout tag:write.writeID];
+    [self.socket writeData:write.data withTimeout:timeout tag:[write.writeID integerValue]];
 }
 
 - (void)completeWrite:(AKSocketWrite *)write success:(BOOL)success {
@@ -195,7 +197,7 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     
     [self.writesM removeObject:write];
     AKAsyncSocketWriteComplete complete = write.complete;
-    !complete ?: complete(success);
+    !complete ? : complete(success);
 }
 
 #pragma mark - GCDAsyncSocketDelegate
@@ -205,6 +207,8 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
  * The host parameter will be an IP address, not a DNS name.
  **/
 - (void)socket:(GCDAsyncSocket *)sock didConnectToHost:(NSString *)host port:(uint16_t)port {
+    AKSocketManagerLog(@"host:%@ port:%@", host, @(port));
+    
     if([self.delegate respondsToSelector:@selector(socketDidConnect:)]) {
         [self.delegate socketDidConnect:self];
     }
@@ -224,6 +228,8 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
  * Not called if there is an error.
  **/
 - (void)socket:(GCDAsyncSocket *)sock didReadData:(NSData *)data withTag:(long)tag {
+    AKSocketManagerLog(@"data:%@\ntag:%@", data, @(tag));
+    
     [self.delegate socket:self didReadData:data];
     [sock readDataWithTimeout:AKAsyncSocketTimeoutNever tag:self.readDataTimes++];
 }
@@ -232,7 +238,9 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
  * Called when a socket has completed writing the requested data. Not called if there is an error.
  **/
 - (void)socket:(GCDAsyncSocket *)sock didWriteDataWithTag:(long)tag {
-    NSPredicate *predicate = [NSPredicate predicateWithFormat:@"writeID = %@", tag];
+    AKSocketManagerLog(@"tag:%@", @(tag));
+    
+    NSPredicate *predicate = [NSPredicate predicateWithFormat:@"writeID = %@", @(tag)];
     AKSocketWrite *write = [self.writesM filteredArrayUsingPredicate:predicate].lastObject;
     [self completeWrite:write success:YES];
     
@@ -261,6 +269,8 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
  * Of course, this depends on how your state machine is configured.
  **/
 - (void)socketDidDisconnect:(GCDAsyncSocket *)sock withError:(nullable NSError *)err {
+    AKSocketManagerLog(@"error:%@", err);
+    
     if([self.delegate respondsToSelector:@selector(socketDidDisconnect:)]) {
         [self.delegate socketDidDisconnect:self];
     }
