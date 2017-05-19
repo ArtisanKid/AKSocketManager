@@ -48,7 +48,7 @@ typedef void (^AKAsyncSocketWriteComplete) (BOOL success);
  @param complete void (^AKAsyncSocketWriteComplete) (BOOL success)
  @return 写入数据标识
  */
-- (NSString *)writeData:(NSData *)data expiredTime:(NSTimeInterval)time complete:(AKAsyncSocketWriteComplete)complete;
+- (NSString *)writeData:(NSData *)data expiredTime:(NSTimeInterval)expiredTime complete:(AKAsyncSocketWriteComplete)complete;
 
 /**
  取消数据写入

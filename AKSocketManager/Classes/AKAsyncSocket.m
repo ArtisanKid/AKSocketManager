@@ -109,15 +109,16 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     [self.socket readDataWithTimeout:AKAsyncSocketTimeoutNever tag:self.readDataTimes++];
 }
 
-- (NSString *)writeData:(NSData *)data expiredTime:(NSTimeInterval)time complete:(AKAsyncSocketWriteComplete)complete {
+- (NSString *)writeData:(NSData *)data expiredTime:(NSTimeInterval)expiredTime complete:(AKAsyncSocketWriteComplete)complete {
     if(!data.length) {
+        !complete ? : complete(NO);
         return nil;
     }
     
     AKSocketWrite *write = [[AKSocketWrite alloc] init];
     write.writeID = @(data.hash).description;
     write.data = data;
-    write.expiredTime = time;
+    write.expiredTime = expiredTime;
     write.createdTime = [NSDate date].timeIntervalSince1970;
     write.complete = complete;
     [self.writesM addObject:write];
@@ -158,7 +159,7 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 
 #pragma mark - Private
 - (BOOL)connect {
-    AKSocketManagerLog(@"连接socket");
+    AKSocketManagerLog(@"正在连接socket...");
     NSError *error = nil;
     BOOL isConnected = [self.socket connectToHost:self.host onPort:self.port error:&error];
     if(!isConnected) {
