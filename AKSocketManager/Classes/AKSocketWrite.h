@@ -37,9 +37,6 @@ typedef void(^AKSocketWriteTimeout)(AKSocketWrite *write);
 
 @property (nonatomic, strong) id complete;
 
-//监控
-- (void)monitorTimeout:(AKSocketWriteTimeout)timeout;
-
 @end
 
 NS_ASSUME_NONNULL_END

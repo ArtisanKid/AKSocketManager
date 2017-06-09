@@ -16,6 +16,15 @@
 
 #import <Foundation/Foundation.h>
 
+typedef NS_ENUM(NSUInteger, AKAsyncSocketState) {
+    AKAsyncSocketStateNone = 0,
+    AKAsyncSocketStateConnecting,
+    AKAsyncSocketStateConnected,
+    AKAsyncSocketStateDisconnecting,
+    AKAsyncSocketStateDisconnected,
+    AKAsyncSocketStateWaitingReconnect, // 等待重连
+};
+
 NS_ASSUME_NONNULL_BEGIN
 
 typedef void (^AKAsyncSocketWriteComplete) (BOOL success);
@@ -63,8 +72,7 @@ typedef void (^AKAsyncSocketWriteComplete) (BOOL success);
 @protocol AKAsyncSocketDelegate <NSObject>
 
 @optional
-- (void)socketDidConnect:(AKAsyncSocket *)socket;
-- (void)socketDidDisconnect:(AKAsyncSocket *)socket;
+- (void)socket:(AKAsyncSocket *)socket didChangeState:(AKAsyncSocketState)state;
 
 @required
 - (void)socket:(AKAsyncSocket *)socket didReadData:(NSData *)data;

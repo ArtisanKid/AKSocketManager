@@ -19,7 +19,7 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 @property (nonatomic, copy) NSString *host;
 @property (nonatomic, assign) uint16_t port;
 
-@property (nonatomic, assign, getter=isReadData) BOOL readData;
+@property (nonatomic, assign, getter=isStartReadData) BOOL startReadData;
 @property (nonatomic, assign) NSUInteger readDataTimes;//读数据次数
 
 @property (nonatomic, assign) NSUInteger writeDataTimes;//写数据次数
@@ -79,10 +79,14 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
         return;
     }
     
+    if([self.delegate respondsToSelector:@selector(socket:didChangeState:)]) {
+        [self.delegate socket:self didChangeState:AKAsyncSocketStateDisconnecting];
+    }
+    
     self.forceDisconnect = YES;
     [NSObject cancelPreviousPerformRequestsWithTarget:self];
     
-    self.readData = NO;
+    self.startReadData = NO;
     self.readDataTimes = 0;
     self.writeDataTimes = 0;
     [self.writesM removeAllObjects];
@@ -96,11 +100,11 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 }
 
 - (void)startReadData {
-    if(self.isReadData) {
+    if(self.isStartReadData) {
         return;
     }
     
-    self.readData = YES;
+    self.startReadData = YES;
     
     if(!self.socket.isConnected) {
         return;
@@ -152,7 +156,8 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
         return NO;
     }
     
-    AKSocketManagerLog(@"writeID:%@", writeID);
+    AKSocketManagerLog(@"取消写入 writeID:%@", writeID);
+    
     [self.writesM removeObject:write];
     return YES;
 }
@@ -160,6 +165,11 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 #pragma mark - Private
 - (BOOL)connect {
     AKSocketManagerLog(@"正在连接socket...");
+    
+    if([self.delegate respondsToSelector:@selector(socket:didChangeState:)]) {
+        [self.delegate socket:self didChangeState:AKAsyncSocketStateConnecting];
+    }
+    
     NSError *error = nil;
     BOOL isConnected = [self.socket connectToHost:self.host onPort:self.port error:&error];
     if(!isConnected) {
@@ -170,35 +180,46 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 
 - (void)writeNext {
     if(!self.writesM.count) {
+        AKSocketManagerLog(@"数据写入完成");
         return;
     }
     
     AKSocketWrite *write = self.writesM.firstObject;
     if(write.isWriting) {
+        AKSocketManagerLog(@"数据正在写入socket...");
         return;
     }
     
     NSTimeInterval now = [NSDate date].timeIntervalSince1970;
     if(write.expiredTime <= now) {
+        AKSocketManagerLog(@"数据过期");
         [self completeWrite:write success:NO];
         return;
     }
     
-    AKSocketManagerLog(@"writeID:%@", write.writeID);
+    AKSocketManagerLog(@"数据开始写入socket...");
     
     write.writing = YES;
+    write.createdTime = now;
+    
     NSTimeInterval timeout = write.expiredTime - now;
     [self.socket writeData:write.data withTimeout:timeout tag:[write.writeID integerValue]];
 }
 
 - (void)completeWrite:(AKSocketWrite *)write success:(BOOL)success {
     if(!write) {
+        AKSocketManagerLog(@"未找到指定的write对象");
+
+        [self writeNext];
         return;
     }
     
     [self.writesM removeObject:write];
+    
     AKAsyncSocketWriteComplete complete = write.complete;
     !complete ? : complete(success);
+    
+    [self writeNext];
 }
 
 #pragma mark - GCDAsyncSocketDelegate
@@ -210,40 +231,16 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 - (void)socket:(GCDAsyncSocket *)sock didConnectToHost:(NSString *)host port:(uint16_t)port {
     AKSocketManagerLog(@"host:%@ port:%@", host, @(port));
     
-    if([self.delegate respondsToSelector:@selector(socketDidConnect:)]) {
-        [self.delegate socketDidConnect:self];
+    if([self.delegate respondsToSelector:@selector(socket:didChangeState:)]) {
+        [self.delegate socket:self didChangeState:AKAsyncSocketStateConnected];
     }
     
     self.reconnectTimes = 0;
     self.forceDisconnect = NO;
     
-    if(self.isReadData) {
+    if(self.isStartReadData) {
         [sock readDataWithTimeout:AKAsyncSocketTimeoutNever tag:self.readDataTimes++];
     }
-    
-    [self writeNext];
-}
-
-/**
- * Called when a socket has completed reading the requested data into memory.
- * Not called if there is an error.
- **/
-- (void)socket:(GCDAsyncSocket *)sock didReadData:(NSData *)data withTag:(long)tag {
-    AKSocketManagerLog(@"data:%@\ntag:%@", data, @(tag));
-    
-    [self.delegate socket:self didReadData:data];
-    [sock readDataWithTimeout:AKAsyncSocketTimeoutNever tag:self.readDataTimes++];
-}
-
-/**
- * Called when a socket has completed writing the requested data. Not called if there is an error.
- **/
-- (void)socket:(GCDAsyncSocket *)sock didWriteDataWithTag:(long)tag {
-    AKSocketManagerLog(@"tag:%@", @(tag));
-    
-    NSPredicate *predicate = [NSPredicate predicateWithFormat:@"writeID = %@", @(tag)];
-    AKSocketWrite *write = [self.writesM filteredArrayUsingPredicate:predicate].lastObject;
-    [self completeWrite:write success:YES];
     
     [self writeNext];
 }
@@ -272,8 +269,8 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 - (void)socketDidDisconnect:(GCDAsyncSocket *)sock withError:(nullable NSError *)err {
     AKSocketManagerLog(@"error:%@", err);
     
-    if([self.delegate respondsToSelector:@selector(socketDidDisconnect:)]) {
-        [self.delegate socketDidDisconnect:self];
+    if([self.delegate respondsToSelector:@selector(socket:didChangeState:)]) {
+        [self.delegate socket:self didChangeState:AKAsyncSocketStateDisconnected];
     }
     
     if(self.isForceDisconnect) {
@@ -283,7 +280,33 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     if(self.reconnectTimes <= 8) {
         self.reconnectTimes++;
     }
+    if([self.delegate respondsToSelector:@selector(socket:didChangeState:)]) {
+        [self.delegate socket:self didChangeState:AKAsyncSocketStateWaitingReconnect];
+    }
     [self performSelector:@selector(connect) withObject:nil afterDelay:pow(2, self.reconnectTimes)];
+}
+
+/**
+ * Called when a socket has completed reading the requested data into memory.
+ * Not called if there is an error.
+ **/
+- (void)socket:(GCDAsyncSocket *)sock didReadData:(NSData *)data withTag:(long)tag {
+    AKSocketManagerLog(@"data:%@\ntag:%@", data, @(tag));
+    
+    [self.delegate socket:self didReadData:data];
+    [sock readDataWithTimeout:AKAsyncSocketTimeoutNever tag:self.readDataTimes++];
+}
+
+/**
+ * Called when a socket has completed writing the requested data. Not called if there is an error.
+ **/
+- (void)socket:(GCDAsyncSocket *)sock didWriteDataWithTag:(long)tag {
+    AKSocketManagerLog(@"tag:%@", @(tag));
+    
+    //NSPredicate(谓词)如果匹配类型不一致，会导致匹配失败
+    NSPredicate *predicate = [NSPredicate predicateWithFormat:@"writeID = %@", @(tag).description];
+    AKSocketWrite *write = [self.writesM filteredArrayUsingPredicate:predicate].lastObject;
+    [self completeWrite:write success:YES];
 }
 
 @end
