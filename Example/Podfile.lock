@@ -10,7 +10,7 @@ DEPENDENCIES:
 
 EXTERNAL SOURCES:
   AKSocketManager:
-    :path: ../
+    :path: "../"
 
 SPEC CHECKSUMS:
   AKSocketManager: 5af8eb13082fdb30ae3bfe8e86b65b3353127a12
@@ -18,4 +18,4 @@ SPEC CHECKSUMS:
 
 PODFILE CHECKSUM: b05c495eeb62dc377fdd75b9cf96dd090024e6d7
 
-COCOAPODS: 1.1.1
+COCOAPODS: 1.2.1
