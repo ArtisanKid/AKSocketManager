@@ -11,7 +11,7 @@
 #import "AKSocketManagerMacro.h"
 #import "AKSocketWrite.h"
 
-static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
+static NSTimeInterval AKAsyncSocketTimeoutNever = -1;
 
 @interface AKAsyncSocket () <GCDAsyncSocketDelegate>
 
@@ -19,7 +19,7 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 @property (nonatomic, copy) NSString *host;
 @property (nonatomic, assign) uint16_t port;
 
-@property (nonatomic, assign, getter=isStartReadData) BOOL startReadData;
+@property (nonatomic, assign, getter=isStartedReadData) BOOL startedReadData;
 @property (nonatomic, assign) NSUInteger readDataTimes;//读数据次数
 
 @property (nonatomic, assign) NSUInteger writeDataTimes;//写数据次数
@@ -41,6 +41,11 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
         sharedInstance = [[super allocWithZone:NULL] init];
     });
     return sharedInstance;
+}
+
+- (void)dealloc {
+    _socket.delegate = nil;
+    [_socket disconnect];
 }
 
 - (instancetype)init {
@@ -86,7 +91,7 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     self.forceDisconnect = YES;
     [NSObject cancelPreviousPerformRequestsWithTarget:self];
     
-    self.startReadData = NO;
+    self.startedReadData = NO;
     self.readDataTimes = 0;
     self.writeDataTimes = 0;
     [self.writesM removeAllObjects];
@@ -100,11 +105,11 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
 }
 
 - (void)startReadData {
-    if(self.isStartReadData) {
+    if(self.isStartedReadData) {
         return;
     }
     
-    self.startReadData = YES;
+    self.startedReadData = YES;
     
     if(!self.socket.isConnected) {
         return;
@@ -238,7 +243,7 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
     self.reconnectTimes = 0;
     self.forceDisconnect = NO;
     
-    if(self.isStartReadData) {
+    if(self.isStartedReadData) {
         [sock readDataWithTimeout:AKAsyncSocketTimeoutNever tag:self.readDataTimes++];
     }
     
@@ -291,7 +296,7 @@ static NSTimeInterval AKAsyncSocketTimeoutNever = - CGFLOAT_MIN;
  * Not called if there is an error.
  **/
 - (void)socket:(GCDAsyncSocket *)sock didReadData:(NSData *)data withTag:(long)tag {
-    AKSocketManagerLog(@"data:%@\ntag:%@", data, @(tag));
+    AKSocketManagerLog(@"data:%@\n数据长度%@ tag:%@", data, @(data.length), @(tag));
     
     [self.delegate socket:self didReadData:data];
     [sock readDataWithTimeout:AKAsyncSocketTimeoutNever tag:self.readDataTimes++];
